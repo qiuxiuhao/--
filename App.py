@@ -1,6 +1,10 @@
-from flask import Flask, request, redirect, url_for, render_template
+from flask import Flask, request,jsonify ,redirect, url_for, render_template
 from flask_cors import CORS
-import json
+import os
+import send
+import code
+import time
+import database_operate
 # 创建Flask服务
 app = Flask(__name__)
 CORS(app)
@@ -22,7 +26,52 @@ def login(): #名字最好与访问路径同名
 
 @app.route('/captcha')  #访问路径,需要与hbuilder对应页面的url的.com之后的一致
 def captcha():
-    return {}
+    m = code.code()
+    cd = str({"code": m})
+    number = str(request.args.get('phonenumber'))
+    # send.senMessage(number, cd)
+    print(m)
+    return {'captcha': m}
+
+@app.route('/exist')  #访问路径,需要与hbuilder对应页面的url的.com之后的一致
+def exist():
+    number = str(request.args.get('phonenumber'))
+    is_newuser = database_operate.OpDB()
+    exist1 = str(is_newuser.exist_phonenumber(number))
+    exist1 = '123456'
+    print(exist1)
+    return {'exist123': exist1}
+
+@app.route('/register')  #访问路径,需要与hbuilder对应页面的url的.com之后的一致
+def register():
+    m = database_operate.OpDB()
+    #number = str(request.args.get('phonenumber'))
+    number = "15717217249"
+    userid = str(m.get_userid(number))
+    print(userid)
+    n = database_operate.OpDB()
+    data = n.get_userinfo(userid)
+    print(data)
+    l = database_operate.OpDB()
+    data1 = l.get_payinfo(userid)
+    mydata = dict(zip(("phone","gender","schoolName", "name","geXin"),data))
+    mydata1 = dict(zip(("pycode", "nopaycode"), data1))
+    bbb = '1234'
+    print(mydata)
+    return {
+            'mydata': mydata,
+            'mydata1': mydata1
+    }
+
+
+@app.route('/upload', methods=['GET', 'POST'])
+def uploads():
+    img = request.files.get('image')
+    name = request.form.get('names')
+    name = str(name) + str(int(time.time())) + '.png'
+    img.save(os.path.join('image', name))
+    return name
+
 
 if __name__ == "__main__":
     # 启动Flask服务，指定主机IP和端口
