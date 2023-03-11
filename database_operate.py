@@ -71,8 +71,6 @@ class OpDB:
         cursor.execute(sql)
         data = cursor.fetchone()  # 获取所有数据
         # print(data)
-        cursor.close()
-        self.close()
         return data[0]
 
 
@@ -80,7 +78,7 @@ class OpDB:
     def get_userinfo(self, userid):
         cursor = self.db.cursor()
         # sql语句
-        sql = """ SELECT  A.phone,A.gender,A.schoolName, B.name,B.geXin 
+        sql = """ SELECT  A.userId,A.password,A.phone,A.gender,A.schoolName, B.name,B.geXin 
                   FROM user_info1 A, user_info2 B 
                   WHERE A.userId = %s AND B.userId = %s""" % (userid, userid)
         # print(sql)
@@ -91,8 +89,8 @@ class OpDB:
         self.close()
         return data
 
-        # 返回除用户密码及图片外所有数据（默认用户存在）
-        # 返回除用户密码及图片外所有数据（默认用户存在）
+
+
     def get_payinfo(self, userid):
         cursor = self.db.cursor()
         sql = """ SELECT  payCode,nopayCode 
@@ -143,10 +141,9 @@ class OpDB:
                 SET %s = '%s'
                 WHERE userId=%d;
                 """ % (typename, value, int(userid))
-        cursor.execute(sql )
+        cursor.execute(sql)
         self.commit()
-        cursor.close()
-        self.close()
+
 
     # 修改昵称，个性签名
     def change_info2(self, typename, value, userid):
@@ -159,8 +156,7 @@ class OpDB:
                 """ % (typename, value, int(userid))
         cursor.execute(sql)
         self.commit()
-        cursor.close()
-        self.close()
+
 
     # 修改支付密码、免密
     def change_payment(self, typename, value, userid):
@@ -173,8 +169,6 @@ class OpDB:
                 """ % (typename, int(value), int(userid))
         cursor.execute(sql)
         self.commit()
-        cursor.close()
-        self.close()
 
     # 获取余额
     def get_payment(self, userid):

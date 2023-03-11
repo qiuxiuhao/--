@@ -28,9 +28,9 @@ class Sample:
         """
         config = open_api_models.Config(
             # 必填，您的 AccessKey ID,
-            access_key_id="LTAI5tF7riCfM8HAzx83225p",
+            access_key_id="LTAI5t7U9EW48AgQ27o6bVDC",
             # 必填，您的 AccessKey Secret,
-            access_key_secret="eEHtcyAlRYGL7UJyhyCf1IrlMIHyxy"
+            access_key_secret=" x9OavCFg8g6ydoM9uYSN4Z2ovDR4gR"
         )
         # 访问的域名
         config.endpoint = f'dysmsapi.aliyuncs.com'

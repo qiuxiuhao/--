@@ -11,19 +11,87 @@ CORS(app)
 # 访问URL：http://127.0.0.1:8080/home/hello
 # 返回结果：{"data":"welcome to use flask.","msg":"hello"}
 
-
+# 手机号登入
 @app.route('/login')  #访问路径,需要与hbuilder对应页面的url的.com之后的一致
 def login(): #名字最好与访问路径同名
     phonenumber1 = str(request.args.get('phonenumber'))     #获取uni.request所提交的data
-    password1 = str(request.args.get('password'))       #获取uni.request所提交的data
-    phonenumber = 123456        
-    password = 123456   #原数据，实际应从数据库中获取
-    if(phonenumber == int(phonenumber1) and password == int(password1)):    #比对数据，确认返回值
-        contrast = True
-    else:
-        contrast = False
-    return {'contrast':contrast}        #以json格式返回数据
+    password1 = str(request.args.get('password')) #获取uni.request所提交的data
+    n = database_operate.OpDB()
+    mydata = ''
+    mydata1= ''
+    userid=''
+    contrast = False
+    if n.exist_phonenumber(phonenumber1):
+        userid = n.get_userid(phonenumber1)
+        if password1 == n.get_password(userid):
+            contrast = True
+    if contrast:
+        z = database_operate.OpDB()
+        data = z.get_userinfo(userid)
+        l = database_operate.OpDB()
+        data1 = l.get_payinfo(userid)
+        mydata = dict(zip(("id", "password", "phonenumber", "gender", "school", "name", "autograph"), data))
+        mydata1 = dict(zip(("payword", "no_secret"), data1))
 
+    return {'contrast': contrast,
+            'userinfo': mydata,
+            'pay': mydata1
+            }        #以json格式返回数据
+
+# 创建新用户
+@app.route('/userinfoset')  #访问路径,需要与hbuilder对应页面的url的.com之后的一致
+def userinfoset():
+    name = str(request.args.get('name'))
+    phonenumber = str(request.args.get('phonenumber'))
+    password = str(request.args.get('password'))
+    gender = str(request.args.get('gender'))
+    school = str(request.args.get('school'))
+    pay_password = str(request.args.get('pay_password'))
+    m = database_operate.OpDB()
+    m.create_user(phonenumber, password, school, gender, name, int(pay_password))
+    return {
+        'f':'true'
+    }
+
+# 获取学校名
+@app.route('/schoolinfo')  #访问路径,需要与hbuilder对应页面的url的.com之后的一致
+def schoolinfo():
+    m = database_operate.OpDB()
+    data = m.get_school()
+    return {'schoolname': data}
+
+@app.route('/submitinfo')  #访问路径,需要与hbuilder对应页面的url的.com之后的一致
+def submitinfo():
+    name = str(request.args.get('name'))
+    # phonenumber = str(request.args.get('phonenumber'))
+    # password = str(request.args.get('password'))
+    gender = str(request.args.get('gender'))
+    school = str(request.args.get('school'))
+    userid = str(request.args.get('id'))
+    autograph = str(request.args.get('autograph'))
+    m = database_operate.OpDB()
+    # m.change_info1('password', password, userid)
+    # m.change_info1('phone', phonenumber, userid)
+    m.change_info1('schoolName', school, userid)
+    m.change_info1('gender', gender, userid)
+    m.change_info2('name', name, userid)
+    m.change_info2('geXin', autograph, userid)
+    return {
+        'f': 'true'
+    }
+
+app.route('/nopayset')  #访问路径,需要与hbuilder对应页面的url的.com之后的一致
+def nopayset():
+    no_secret = str(request.args.get('no_secret'))
+    userid = str(request.args.get('id'))
+    m = database_operate.OpDB()
+    m.change_payment('nopayCode', no_secret, userid)
+    return {
+        'f': 'true'
+    }
+
+
+# 发送验证码
 @app.route('/captcha')  #访问路径,需要与hbuilder对应页面的url的.com之后的一致
 def captcha():
     m = code.code()
@@ -45,25 +113,23 @@ def exist():
 @app.route('/register')  #访问路径,需要与hbuilder对应页面的url的.com之后的一致
 def register():
     m = database_operate.OpDB()
-    #number = str(request.args.get('phonenumber'))
-    number = "15717217249"
+    number = str(request.args.get('phonenumber'))
     userid = str(m.get_userid(number))
-    print(userid)
+
     n = database_operate.OpDB()
     data = n.get_userinfo(userid)
-    print(data)
+
     l = database_operate.OpDB()
     data1 = l.get_payinfo(userid)
-    mydata = dict(zip(("phone","gender","schoolName", "name","geXin"),data))
-    mydata1 = dict(zip(("pycode", "nopaycode"), data1))
-    bbb = '1234'
-    print(mydata)
+    mydata = dict(zip(("id","password","phonenumber","gender","school", "name","autograph"),data))
+    mydata1 = dict(zip(("payword", "no_secret"), data1))
+
     return {
-            'mydata': mydata,
-            'mydata1': mydata1
+            'userinfo': mydata,
+            'pay': mydata1
     }
 
-
+# 上传图片
 @app.route('/upload', methods=['GET', 'POST'])
 def uploads():
     img = request.files.get('image')
