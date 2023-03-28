@@ -73,12 +73,11 @@ class OpDB:
         # print(data)
         return data[0]
 
-
     # 返回除用户密码及图片外所有数据（默认用户存在）
     def get_userinfo(self, userid):
         cursor = self.db.cursor()
         # sql语句
-        sql = """ SELECT  A.userId,A.password,A.phone,A.gender,A.schoolName, B.name,B.geXin 
+        sql = """ SELECT  A.userId,A.password,A.phone,A.gender,A.schoolName, B.name,B.autograph 
                   FROM user_info1 A, user_info2 B 
                   WHERE A.userId = %s AND B.userId = %s""" % (userid, userid)
         # print(sql)
@@ -88,8 +87,6 @@ class OpDB:
         cursor.close()
         self.close()
         return data
-
-
 
     def get_payinfo(self, userid):
         cursor = self.db.cursor()
@@ -101,7 +98,6 @@ class OpDB:
         cursor.close()
         self.close()
         return data
-
 
     # 创建用户数据(默认为新用户)
     def create_user(self, phone, password, schoolname, gender, name, paycode):
@@ -144,7 +140,6 @@ class OpDB:
         cursor.execute(sql)
         self.commit()
 
-
     # 修改昵称，个性签名
     def change_info2(self, typename, value, userid):
         cursor = self.db.cursor()
@@ -156,7 +151,6 @@ class OpDB:
                 """ % (typename, value, int(userid))
         cursor.execute(sql)
         self.commit()
-
 
     # 修改支付密码、免密
     def change_payment(self, typename, value, userid):
@@ -207,45 +201,382 @@ class OpDB:
         self.close()
         return j
 
+    # 创建交易记录
+    def create_trade(self, typename, userid, trademoney, remarks):
+        cursor = self.db.cursor()
+        # sql语句
+        sql = """
+                    INSERT INTO trade_info(type, userId, tradeMoney, remarks)
+                    VALUES (%s,%s,%s,%s)
+            """
+        cursor.execute(sql, (typename, userid, trademoney, remarks))
+        self.commit()
+        cursor.close()
+        self.close()
+
+    # 根据学校名查询所有未完成的失物招领订单
+    def get_loss(self, school):
+        cursor = self.db.cursor()
+        sql = "SELECT lossId,date,name,type,avatar from loss_info WHERE school = '%s' and state = 0" % school
+        cursor.execute(sql)
+        data = cursor.fetchall()
+        cursor.close()
+        self.close()
+        # j = ()
+        # for i in data:
+        #     j = j + i
+        return data
+
+    # 根据学校名查询所有未出售的二手商品
+    def get_commodity(self, school):
+        cursor = self.db.cursor()
+        sql = "SELECT commodityId, date, commodityName, type, avatar " \
+              "from commodity_info WHERE school = '%s' and state = 0" % school
+        cursor.execute(sql)
+        data = cursor.fetchall()
+        cursor.close()
+        self.close()
+        return data
+
+    # 根据学校名查询所有未出售的二手商品
+    def get_commission(self, school):
+        cursor = self.db.cursor()
+        sql = "SELECT commissionId,date,name,type,avatar from commission_info WHERE school = '%s' and state = 0" % school
+        cursor.execute(sql)
+        data = cursor.fetchall()
+        cursor.close()
+        self.close()
+        return data
+
+    # 默认商品id正确
+    # 根据用户id和商品id(代办id、失物招领id)生成收藏信息
+    def create_favorite(self, userid, type_, goodid):
+        cursor = self.db.cursor()
+        # sql语句
+        sql = """
+                INSERT INTO favorite_info(userId, type, goodId) 
+                VALUES (%s,%s,%s)
+        """
+        cursor.execute(sql, (userid, type_, goodid))
+        self.commit()
+        cursor.close()
+        self.close()
+
+    # 根据用户id、商品id、收货地址生成购物订单
+    def create_shopping(self, userid, address, commodity):
+        cursor = self.db.cursor()
+        # sql语句
+        sql = """
+                INSERT INTO shopping_info(userId, commodityId, address) 
+                VALUES (%s,%s,%s)
+        """
+        cursor.execute(sql, (userid, commodity, address))
+        self.commit()
+        cursor.close()
+        self.close()
+
+    # 根据用户id、代办id生成代办订单
+    def create_daiban(self, userid, commission):
+        cursor = self.db.cursor()
+        # sql语句
+        sql = """
+                INSERT INTO daiban_info(userId, commissionId) 
+                VALUES (%s,%s)
+        """
+        cursor.execute(sql, (userid, commission))
+        self.commit()
+        cursor.close()
+        self.close()
+
+    # 新增失物/招领订单
+    def create_lossinfo(self, userid, type_, name,address, detail, school, avatar):
+        cursor = self.db.cursor()
+        # sql语句
+        sql = """
+                INSERT INTO loss_info(userId, type, name, address, detail, school, avatar) 
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+        """
+        cursor.execute(sql, (userid, type_, name,  address, detail, school, avatar))
+        self.commit()
+        cursor.close()
+        self.close()
+
+    # 新增发布代办
+    def create_commissioninfo(self, userid, school, name, detail, price, avatar):
+        cursor = self.db.cursor()
+        # sql语句
+        sql = """
+                INSERT INTO commission_info(userId, school, name, detail, price, avatar) 
+                VALUES (%s,%s,%s,%s,%s,%s)
+        """
+        cursor.execute(sql, (userid, school, name, detail, price, avatar))
+        self.commit()
+        cursor.close()
+        self.close()
+
+    # 新增发布商品
+    def create_commodityinfo(self, userid, school, name, detail, price, avatar):
+        cursor = self.db.cursor()
+        # sql语句
+        sql = """
+                INSERT INTO commodity_info(userId, school, commodityName, detail, price, avatar) 
+                VALUES (%s,%s,%s,%s,%s,%s)
+        """
+        cursor.execute(sql, (userid, school, name, detail, price, avatar))
+        self.commit()
+        cursor.close()
+        self.close()
+
+    # 根据用户id查询发布二手订单
+    def get_commodity_order(self, userid):
+        cursor = self.db.cursor()
+        sql = "SELECT commodityId from commodity_info WHERE userId = '%s'" % userid
+        cursor.execute(sql)
+        data = cursor.fetchall()
+        j = ()
+        for i in data:
+            sql = "SELECT orderId from shopping_info WHERE commodityId = '%s'" % int(i[0])
+            cursor.execute(sql)
+            j = j + cursor.fetchall()
+        cursor.close()
+        self.close()
+        k = ()
+        for i in j:
+            k = k + i
+        return k
+
+    # 根据用户id查询发布代办订单
+    def get_commission_order(self, userid):
+        cursor = self.db.cursor()
+        sql = "SELECT commissionId from commission_info WHERE userId = '%s'" % userid
+        cursor.execute(sql)
+        data = cursor.fetchall()
+        j = ()
+        for i in data:
+            sql = "SELECT orderId from daiban_info WHERE commissionId = '%s'" % int(i[0])
+            cursor.execute(sql)
+            j = j + cursor.fetchall()
+        cursor.close()
+        self.close()
+        k = ()
+        for i in j:
+            k = k + i
+        return k
+
+    # 根据用户id查询接受代办订单
+    def get_commission_order1(self, userid):
+        cursor = self.db.cursor()
+        sql = "SELECT orderId from daiban_info WHERE userId = '%s'" % userid
+        cursor.execute(sql)
+        data = cursor.fetchall()
+        cursor.close()
+        self.close()
+        k = ()
+        for i in data:
+            k = k + i
+        return k
+
+    # 根据用户id查询接受二手商品订单
+    def get_commodity_order1(self, userid):
+        cursor = self.db.cursor()
+        sql = "SELECT orderId from shopping_info WHERE userId = '%s'" % userid
+        cursor.execute(sql)
+        data = cursor.fetchall()
+        cursor.close()
+        self.close()
+        k = ()
+        for i in data:
+            k = k + i
+        return k
+
+    # 查询对应代办订单id的订单信息（含评价信息)
+    def get_daibaninfo(self, orderid):
+        cursor = self.db.cursor()
+        sql = "SELECT commissionId,userId,state,date,time,commentId from daiban_info WHERE orderId = '%s'" % orderid
+        cursor.execute(sql)
+        data = cursor.fetchall()
+        data = data[0]
+        # print(data)
+        if data[5] != "Null":
+            sql = "SELECT detail,replay from comment_info WHERE commentId = '%s'" % data[5]
+            cursor.execute(sql)
+            j = cursor.fetchall()
+            for i in j:
+                data = data + i
+        cursor.close()
+        self.close()
+        return data
+
+    # 查询对应购物订单id的订单信息（含评价信息)
+    def get_shoppinginfo(self, orderid):
+        cursor = self.db.cursor()
+        sql = "SELECT commodityId,userId,state,date,time,commentId,address from shopping_info WHERE orderId = '%s'" % orderid
+        cursor.execute(sql)
+        data = cursor.fetchall()
+        data = data[0]
+        # print(data)
+        if data[5] != "Null":
+            sql = "SELECT detail,replay from comment_info WHERE commentId = '%s'" % data[5]
+            cursor.execute(sql)
+            j = cursor.fetchall()
+            for i in j:
+                data = data + i
+        cursor.close()
+        self.close()
+        return data
+
+    # 查询对应商品id的商品信息
+    def get_commodityinfo(self, commodityid):
+        cursor = self.db.cursor()
+        sql = "SELECT commodityId,userId,date,commodityName,school,price,avatar,detail,state,type " \
+              "from commodity_info WHERE commodityId = '%s'" % commodityid
+        cursor.execute(sql)
+        data = cursor.fetchall()
+        data = data[0]
+        cursor.close()
+        self.close()
+        return data
+
+    # 查询对应代办id的商品信息
+    def get_commissioninfo(self, commissionid):
+        cursor = self.db.cursor()
+        sql = "SELECT commissionId, userId,date,name,school,price,avatar,detail,state,type " \
+              "from commission_info WHERE commissionId = '%s'" % commissionid
+        cursor.execute(sql)
+        data = cursor.fetchall()
+        data = data[0]
+        cursor.close()
+        self.close()
+        return data
+
+    # 查询对应失物招领id的失物招领信息
+    def get_lossinfo(self, lossid):
+        cursor = self.db.cursor()
+        sql = "SELECT lossId,userId,date,name,school,avatar,detail,state,type,time,address " \
+              "from loss_info WHERE lossId = '%s'" % lossid
+        cursor.execute(sql)
+        data = cursor.fetchall()
+        data = data[0]
+        cursor.close()
+        self.close()
+        return data
+
 
 if __name__ == "__main__":
     A = OpDB()
     if A.exist_user("10001010"):
         C = A.get_password("10001010")
         print(C)
-
-    B = OpDB()
-    D = B.get_userinfo("10001000")
-    print(D)
+    #
+    # B = OpDB()
+    # D = B.get_userinfo("10001020")
+    # print(D)
 
     # E = OpDB()
     # E.create_user("12345672839", "hcuihiuchaiu", "schoolname3", "男", "bxhsudu", 123456)
 
-    T = OpDB()
-    T.exist_phonenumber("15717217249")
+    # T = OpDB()
+    # T.exist_phonenumber("15717217249")
 
     # R = OpDB()
     # R.change_info1("password", "bxhgcdy", "10001019")
 
     # S = OpDB()
-    # S.change_payment("nopayCode", "1", "10001020")
+    # S.change_payment("payCode", "111222", "10001020")
 
     # W = OpDB()
     # W.change_money("150", "10001020")
 
-    N = OpDB()
-    M = N.get_payment("10001020")
-    print(M)
+    # N = OpDB()
+    # M = N.get_payment("10001020")
+    # print(M)
 
-    L = OpDB()
-    P = L.get_school()
-    print(P)
+    # L = OpDB()
+    # P = L.get_school()
+    # print(P)
+    #
+    # K = OpDB()
+    # WW = K.get_userid('15717217249')
+    # # KK = K.get_userinfo(str(WW))
+    # print(WW)
 
-    K = OpDB()
-    WW = K.get_userid('15717217249')
-    # KK = K.get_userinfo(str(WW))
-    print(WW)
+    # HH = OpDB()
+    # LL = HH.get_payinfo("10001020")
+    # print(LL)
 
-    HH = OpDB()
-    LL = HH.get_payinfo("10001020")
-    print(LL)
+
+    Z = OpDB()
+    ZZ = Z.get_loss("中国矿业大学（北京）")
+    print(ZZ)
+
+    # Z = OpDB()
+    # ZZ = Z.get_commodity("清华大学")
+    # print(ZZ)
+    #
+    # Z = OpDB()
+    # ZZ = Z.get_commission("清华大学")
+    # print(ZZ)
+
+    # Z = OpDB()
+    # Z.create_favorite("10001020", "二手", "2")
+    #
+    # Z = OpDB()
+    # Z.create_shopping("10001020", "中国矿业学校（北京）学八", "2")
+
+    # Z = OpDB()
+    # Z.create_daiban("10001020", "4")
+
+    # Z = OpDB()
+    # Z.create_lossinfo("10001020", "失物", "饭卡", "教学楼南楼", "具体时间为今天早上到今天中午之间，仅在加血楼南楼一二三层活动过", "中国矿业大学（北京）", "nsahduuihw")
+
+    # Z = OpDB()
+    # Z.create_commissioninfo("10001020", "中国矿业大学（北京）", "取快递", "清真九号柜", "10", "xnauuwdu")
+
+    # Z = OpDB()
+    # Z.create_commodityinfo("10001020", "中国矿业大学（北京）", "书", "计算机专业大二书籍", "30", "cbhdgdv")
+
+    # Z = OpDB()
+    # ZZ = Z.get_commodity_order("10001020")
+    # print(ZZ)
+    #
+    # Z = OpDB()
+    # ZZ = Z.get_commission_order("10001020")
+    # print(ZZ)
+    #
+    # Z = OpDB()
+    # ZZ = Z.get_commission_order1("10001020")
+    # print(ZZ)
+    #
+    # Z = OpDB()
+    # ZZ = Z.get_commodity_order1("10001020")
+    # print(ZZ)
+    #
+    # Z = OpDB()
+    # ZZ = Z.get_daibaninfo("2")
+    # print(ZZ)
+    #
+    # Z = OpDB()
+    # ZZ = Z.get_shoppinginfo("3")
+    # print(ZZ)
+    #
+    # Z = OpDB()
+    # ZZ = Z.get_commodityinfo("21")
+    # print(ZZ)
+    #
+    # Z = OpDB()
+    # ZZ = Z.get_commissioninfo("21")
+    # print(ZZ)
+    #
+    Z = OpDB()
+    ZZ = Z.get_lossinfo("22")
+    print(ZZ)
+
+    # Z = OpDB()
+    # Z.create_trade("充值", "10001020", "100", "支付宝")
+
+
+
+
+
+
+
