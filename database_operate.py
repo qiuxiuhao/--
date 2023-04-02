@@ -1,4 +1,5 @@
 import pymysql
+import datetime
 
 
 # 打开数据库进行连接，host：主机名或IP ； user：用户名；password：密码； database：数据库名称
@@ -170,9 +171,7 @@ class OpDB:
         sql = "SELECT money FROM payment_info where userid = %s" % userid
         cursor.execute(sql)
         data = cursor.fetchone()
-        cursor.close()
-        self.close()
-        return str(data[0])
+        return data[0]
 
     # 修改余额（传入余额值保证至多为两位小数)
     def change_money(self, value, userid):
@@ -184,9 +183,6 @@ class OpDB:
                     WHERE userId=%d;
                     """ % (float(value), int(userid))
         cursor.execute(sql)
-        self.commit()
-        cursor.close()
-        self.close()
 
     # 获取所有学校
     def get_school(self):
@@ -201,23 +197,11 @@ class OpDB:
         self.close()
         return j
 
-    # 创建交易记录
-    def create_trade(self, typename, userid, trademoney, remarks):
-        cursor = self.db.cursor()
-        # sql语句
-        sql = """
-                    INSERT INTO trade_info(type, userId, tradeMoney, remarks)
-                    VALUES (%s,%s,%s,%s)
-            """
-        cursor.execute(sql, (typename, userid, trademoney, remarks))
-        self.commit()
-        cursor.close()
-        self.close()
-
     # 根据学校名查询所有未完成的失物招领订单
     def get_loss(self, school):
         cursor = self.db.cursor()
-        sql = "SELECT lossId,date,name,type,avatar from loss_info WHERE school = '%s' and state = 0" % school
+        sql = "SELECT lossId,DATE_FORMAT(date,'%%Y-%%m-%%d %%H:%%I:%%s'),name,type,avatar from loss_info WHERE school " \
+              "= '%s' and state = 0" % school
         cursor.execute(sql)
         data = cursor.fetchall()
         cursor.close()
@@ -230,7 +214,7 @@ class OpDB:
     # 根据学校名查询所有未出售的二手商品
     def get_commodity(self, school):
         cursor = self.db.cursor()
-        sql = "SELECT commodityId, date, commodityName, type, avatar " \
+        sql = "SELECT commodityId, DATE_FORMAT(date,'%%Y-%%m-%%d %%H:%%I:%%s'), commodityName, type, avatar " \
               "from commodity_info WHERE school = '%s' and state = 0" % school
         cursor.execute(sql)
         data = cursor.fetchall()
@@ -241,7 +225,8 @@ class OpDB:
     # 根据学校名查询所有未出售的二手商品
     def get_commission(self, school):
         cursor = self.db.cursor()
-        sql = "SELECT commissionId,date,name,type,avatar from commission_info WHERE school = '%s' and state = 0" % school
+        sql = "SELECT commissionId,DATE_FORMAT(date,'%%Y-%%m-%%d %%H:%%I:%%s'),name,type,avatar from commission_info " \
+              "WHERE school = '%s' and state = 0" % school
         cursor.execute(sql)
         data = cursor.fetchall()
         cursor.close()
@@ -262,6 +247,23 @@ class OpDB:
         cursor.close()
         self.close()
 
+    # 新增交易信息
+    # 创建交易记录
+    def create_trade(self, typename, userid, trademoney, remarks):
+        cursor = self.db.cursor()
+        # sql语句
+        sql = """
+                    INSERT INTO trade_info(type, userId, tradeMoney, remarks)
+                    VALUES (%s,%s,%s,%s)
+            """
+        cursor.execute(sql, (typename, userid, trademoney, remarks))
+        money = float(self.get_payment(userid))
+        if typename == "充值":
+            money = str(money + float(trademoney))
+        else:
+            money = str(money - float(trademoney))
+        self.change_money(money, userid)
+
     # 根据用户id、商品id、收货地址生成购物订单
     def create_shopping(self, userid, address, commodity):
         cursor = self.db.cursor()
@@ -271,45 +273,75 @@ class OpDB:
                 VALUES (%s,%s,%s)
         """
         cursor.execute(sql, (userid, commodity, address))
-        self.commit()
-        cursor.close()
-        self.close()
+        orderid = cursor.lastrowid
+        sql = """
+                update commodity_info
+                set state = 1
+                where commodityId = %s
+                        """ % commodity
+        cursor.execute(sql)
+        sql = """
+                    select price,userId
+                    from commodity_info
+                    where commodityId = %s
+                """ % commodity
+        cursor.execute(sql)
+        data = cursor.fetchall()
+        data = data[0]
+        money = self.get_payment(userid)
+        if money < data[0]:
+            return False
+        else:
+            self.create_trade("付款", userid, data[0], "二手" + str(orderid))
+            self.create_trade("充值", data[1], data[0], "二手" + str(orderid))
+            self.commit()
+            cursor.close()
+            self.close()
+            return True
 
     # 根据用户id、代办id生成代办订单
-    def create_daiban(self, userid, commission):
+    def create_daiban(self, userid, commissionid):
         cursor = self.db.cursor()
         # sql语句
         sql = """
                 INSERT INTO daiban_info(userId, commissionId) 
                 VALUES (%s,%s)
         """
-        cursor.execute(sql, (userid, commission))
+        cursor.execute(sql, (userid, commissionid))
+        sql = """
+                update commission_info
+                set state = 1
+                where commissionId = %s
+                        """ % commissionid
+        cursor.execute(sql)
         self.commit()
         cursor.close()
         self.close()
 
     # 新增失物/招领订单
-    def create_lossinfo(self, userid, type_, name,address, detail, school, avatar):
+    def create_lossinfo(self, userid, type_, name, address, detail, school, avatar):
         cursor = self.db.cursor()
         # sql语句
         sql = """
                 INSERT INTO loss_info(userId, type, name, address, detail, school, avatar) 
                 VALUES (%s,%s,%s,%s,%s,%s,%s)
         """
-        cursor.execute(sql, (userid, type_, name,  address, detail, school, avatar))
+        cursor.execute(sql, (userid, type_, name, address, detail, school, avatar))
         self.commit()
         cursor.close()
         self.close()
 
     # 新增发布代办
-    def create_commissioninfo(self, userid, school, name, detail, price, avatar):
+    def create_commissioninfo(self, userid, school, name, detail, price):
         cursor = self.db.cursor()
         # sql语句
         sql = """
-                INSERT INTO commission_info(userId, school, name, detail, price, avatar) 
-                VALUES (%s,%s,%s,%s,%s,%s)
+                INSERT INTO commission_info(userId, school, name, detail, price) 
+                VALUES (%s,%s,%s,%s,%s)
         """
-        cursor.execute(sql, (userid, school, name, detail, price, avatar))
+        cursor.execute(sql, (userid, school, name, detail, price))
+        self.create_trade("付款", userid, price, "代办")
+        self.create_trade("充值", "0", price, "代办")
         self.commit()
         cursor.close()
         self.close()
@@ -392,7 +424,8 @@ class OpDB:
     # 查询对应代办订单id的订单信息（含评价信息)
     def get_daibaninfo(self, orderid):
         cursor = self.db.cursor()
-        sql = "SELECT commissionId,userId,state,date,time,commentId from daiban_info WHERE orderId = '%s'" % orderid
+        sql = "SELECT commissionId,userId,state,DATE_FORMAT(date,'%%Y-%%m-%%d %%H:%%I:%%s'),DATE_FORMAT(time," \
+              "'%%Y-%%m-%%d %%H:%%I:%%s'),commentId from daiban_info WHERE orderId = '%s'" % orderid
         cursor.execute(sql)
         data = cursor.fetchall()
         data = data[0]
@@ -410,7 +443,8 @@ class OpDB:
     # 查询对应购物订单id的订单信息（含评价信息)
     def get_shoppinginfo(self, orderid):
         cursor = self.db.cursor()
-        sql = "SELECT commodityId,userId,state,date,time,commentId,address from shopping_info WHERE orderId = '%s'" % orderid
+        sql = "SELECT commodityId,userId,state,DATE_FORMAT(date,'%%Y-%%m-%%d %%H:%%I:%%s'),DATE_FORMAT(time," \
+              "'%%Y-%%m-%%d %%H:%%I:%%s'),commentId,address from shopping_info WHERE orderId = '%s'" % orderid
         cursor.execute(sql)
         data = cursor.fetchall()
         data = data[0]
@@ -428,7 +462,8 @@ class OpDB:
     # 查询对应商品id的商品信息
     def get_commodityinfo(self, commodityid):
         cursor = self.db.cursor()
-        sql = "SELECT commodityId,userId,date,commodityName,school,price,avatar,detail,state,type " \
+        sql = "SELECT commodityId,userId,DATE_FORMAT(date,'%%Y-%%m-%%d %%H:%%I:%%s'),commodityName,school,price," \
+              "avatar,detail,state,type " \
               "from commodity_info WHERE commodityId = '%s'" % commodityid
         cursor.execute(sql)
         data = cursor.fetchall()
@@ -440,7 +475,8 @@ class OpDB:
     # 查询对应代办id的商品信息
     def get_commissioninfo(self, commissionid):
         cursor = self.db.cursor()
-        sql = "SELECT commissionId, userId,date,name,school,price,avatar,detail,state,type " \
+        sql = "SELECT commissionId, userId,DATE_FORMAT(date,'%%Y-%%m-%%d %%H:%%I:%%s'),name,school,price,avatar," \
+              "detail,state,type " \
               "from commission_info WHERE commissionId = '%s'" % commissionid
         cursor.execute(sql)
         data = cursor.fetchall()
@@ -452,14 +488,188 @@ class OpDB:
     # 查询对应失物招领id的失物招领信息
     def get_lossinfo(self, lossid):
         cursor = self.db.cursor()
-        sql = "SELECT lossId,userId,date,name,school,avatar,detail,state,type,time,address " \
-              "from loss_info WHERE lossId = '%s'" % lossid
+        sql = """
+                SELECT lossId,userId, DATE_FORMAT(date,'%%Y-%%m-%%d %%H:%%I:%%s'),name,school,avatar,detail,state,type,time,address
+                from loss_info WHERE lossId = '%s'
+         """ % lossid
         cursor.execute(sql)
         data = cursor.fetchall()
         data = data[0]
         cursor.close()
         self.close()
         return data
+
+    # 确认完成购物订单
+    def commit_shoppingorder(self, orderid):
+        cursor = self.db.cursor()
+        datatime = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # sql语句
+        sql = """
+                update shopping_info
+                set state = '已完成' , time = %s
+                where orderId = %s
+        """
+        cursor.execute(sql, (datatime, orderid))
+        self.commit()
+        cursor.close()
+        self.close()
+
+    # 确认完成失物招领
+    def commit_lossorder(self, lossid):
+        cursor = self.db.cursor()
+        datatime = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # sql语句
+        sql = """
+                update loss_info
+                set state = 1 , time = %s
+                where lossId = %s
+        """
+        cursor.execute(sql, (datatime, lossid))
+        self.commit()
+        cursor.close()
+        self.close()
+
+    # 确认完成代办订单
+    def commit_daibanorder(self, orderid):
+        cursor = self.db.cursor()
+        datatime = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # sql语句
+        sql = """
+                update daiban_info
+                set state = '已完成' , time = %s
+                where orderId = %s
+        """
+        cursor.execute(sql, (datatime, orderid))
+        sql = """
+                    select commissionId,userId
+                    from daiban_info
+                    where orderId = %s
+            """ % orderid
+        cursor.execute(sql)
+        data1 = cursor.fetchall()
+        data1 = data1[0]
+        sql = """
+                                select price,userId
+                                from commission_info
+                                where commissionId = %s
+                        """ % data1[0]
+        cursor.execute(sql)
+        data = cursor.fetchall()
+        data = data[0]
+        self.create_trade("充值", data1[1], data[0], "代办" + str(orderid))
+        self.create_trade("付款", 0, data[0], "代办" + str(orderid))
+        self.commit()
+        cursor.close()
+        self.close()
+
+    # 取消代办订单
+    def cancel_daibanorder(self, orderid):
+        cursor = self.db.cursor()
+        datatime = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # sql语句
+        sql = """
+                update daiban_info
+                set state = '已取消' , time = %s
+                where orderId = %s
+        """
+        cursor.execute(sql, (datatime, orderid))
+        sql = """
+                    select commissionId
+                    from daiban_info
+                    where orderId = %s
+                                """ % orderid
+        cursor.execute(sql)
+        data1 = cursor.fetchall()
+        data1 = data1[0]
+        sql = """
+                    update commission_info
+                    set state = 0
+                    where commissionId = %s
+                """ % data1[0]
+        cursor.execute(sql)
+        self.commit()
+        cursor.close()
+        self.close()
+
+    # 取消购物订单
+    def cancel_shoppingorder(self, orderid):
+        cursor = self.db.cursor()
+        datatime = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # sql语句
+        sql = """
+                update shopping_info
+                set state = '已取消' , time = %s
+                where orderId = %s
+        """
+        cursor.execute(sql, (datatime, orderid))
+        sql = """
+                select commodityId,userId
+                from shopping_info
+                where orderId = %s
+                        """ % orderid
+        cursor.execute(sql)
+        data1 = cursor.fetchall()
+        data1 = data1[0]
+        sql = """
+                update commodity_info
+                set state = 0
+                where commodityId = %s
+        """ % data1[0]
+        cursor.execute(sql)
+        sql = """
+                    select price,userId
+                    from commodity_info
+                    where commodityId = %s
+                        """ % data1[0]
+        cursor.execute(sql)
+        data = cursor.fetchall()
+        data = data[0]
+        self.create_trade("付款", data[1], data[0], "购物退款" + str(orderid))
+        self.create_trade("充值", data1[1], data[0], "购物退款" + str(orderid))
+        self.commit()
+        cursor.close()
+        self.close()
+
+    # 发布评价
+    def create_comment(self, detail, typename, id_):
+        cursor = self.db.cursor()
+        # sql语句
+        sql = """
+                        INSERT INTO comment_info(detail) 
+                        VALUES (%s)
+                """
+        cursor.execute(sql, detail)
+        commentid = cursor.lastrowid
+        if typename == '代办':
+            sql = """
+                    update daiban_info
+                    set commentId = %s
+                    where orderId = %s
+            """
+            cursor.execute(sql, (commentid, id_))
+        else:
+            sql = """
+                    update shopping_info
+                    set commentId = %s
+                    where orderId = %s
+            """
+            cursor.execute(sql, (commentid, id_))
+        self.commit()
+        cursor.close()
+        self.close()
+
+    # 回复评价
+    def create_comment_replay(self, replay, commentid):
+        cursor = self.db.cursor()
+        sql = """
+                    update comment_info
+                    set replay = %s
+                    where commentId = %s
+            """
+        cursor.execute(sql, (replay, commentid))
+        self.commit()
+        cursor.close()
+        self.close()
 
 
 if __name__ == "__main__":
@@ -503,11 +713,10 @@ if __name__ == "__main__":
     # HH = OpDB()
     # LL = HH.get_payinfo("10001020")
     # print(LL)
-
-
-    Z = OpDB()
-    ZZ = Z.get_loss("中国矿业大学（北京）")
-    print(ZZ)
+    #
+    # Z = OpDB()
+    # ZZ = Z.get_loss("中国矿业大学（北京）")
+    # print(ZZ)
 
     # Z = OpDB()
     # ZZ = Z.get_commodity("清华大学")
@@ -574,9 +783,11 @@ if __name__ == "__main__":
     # Z = OpDB()
     # Z.create_trade("充值", "10001020", "100", "支付宝")
 
+    # Z = OpDB()
+    # Z.commit_daibanorder("6")
 
+    # Z = OpDB()
+    # Z.cancel_shoppingorder("37")
 
-
-
-
-
+    # Z = OpDB()
+    # Z.create_comment_replay("3333", "3")

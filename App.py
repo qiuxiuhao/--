@@ -134,9 +134,9 @@ def commission_id():
 #                       , data))
 #     return mydata
 
-
-@app.route('/create_commodity')  # 访问路径,需要与hbuilder对应页面的url的.com之后的一致
-def create_commodity():
+# 发布失物招领
+@app.route('/create_loss')  # 访问路径,需要与hbuilder对应页面的url的.com之后的一致
+def create_loss():
     userid = str(request.args.get('id'))
     typename = str(request.args.get('type'))
     name = str(request.args.get('name'))
@@ -148,6 +148,56 @@ def create_commodity():
     m.create_lossinfo(userid, typename, name,  address, detail, school, avatar)
     return {
         'f': 'true'
+    }
+
+
+# 发布二手商品
+@app.route('/create_commodity')  # 访问路径,需要与hbuilder对应页面的url的.com之后的一致
+def create_commodity():
+    userid = str(request.args.get('id'))
+    name = str(request.args.get('name'))
+    price = str(request.args.get('price'))
+    detail = str(request.args.get('detail'))
+    school = str(request.args.get('school'))
+    avatar = str(request.args.get('avatar'))
+    m = database_operate.OpDB()
+    m.create_commodityinfo(userid, school, name, detail, price, avatar)
+    return {
+        'f': 'true'
+    }
+
+
+# 发布代办
+@app.route('/create_commission')  # 访问路径,需要与hbuilder对应页面的url的.com之后的一致
+def create_commission():
+    userid = str(request.args.get('id'))
+    name = str(request.args.get('name'))
+    price = str(request.args.get('price'))
+    detail = str(request.args.get('detail'))
+    school = str(request.args.get('school'))
+    m = database_operate.OpDB()
+    balance = m.get_payment(userid)
+    if float(price) > balance:
+        return {
+            'f': 'false'
+        }
+    else:
+        m.create_commissioninfo(userid, school, name, detail, price)
+        return {
+            'f': 'true'
+        }
+
+
+# 生成购买订单
+@app.route('/create_shopping')  # 访问路径,需要与hbuilder对应页面的url的.com之后的一致
+def create_shopping():
+    userid = str(request.args.get('user_id'))
+    address = str(request.args.get('address'))
+    commodity = str(request.args.get('good_id'))
+    m = database_operate.OpDB()
+    n = m.create_shopping(userid, address, commodity)
+    return {
+        'f': n
     }
 
 
@@ -273,6 +323,7 @@ def uploads():
     name = request.form.get('names')
     name = str(name) + str(int(time.time())) + '.png'
     img.save(os.path.join('image', name))
+    name = 'https://www.cloudproject.top/photo/' + name
     return name
 
 
