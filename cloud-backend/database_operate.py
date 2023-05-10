@@ -81,11 +81,9 @@ class OpDB:
     def get_userinfo(self, userid):
         cursor = self.db.cursor()
         # sql语句
-        sql = """ SELECT  A.userId,A.password,A.phone,A.gender,A.schoolName, B.name,B.autograph 
+        sql = """ SELECT  A.userId,A.password,A.phone,A.gender,A.schoolName, B.name,B.autograph,B.avatar 
                   FROM user_info1 A, user_info2 B 
                   WHERE A.userId = %s AND B.userId = %s""" % (userid, userid)
-        # print(sql)
-        # 使用execute()方法执行SQL查询
         cursor.execute(sql)
         data = cursor.fetchone()  # 获取所有数据
         cursor.close()
@@ -104,7 +102,7 @@ class OpDB:
         return data
 
     # 创建用户数据(默认为新用户)
-    def create_user(self, phone, password, schoolname, gender, name, paycode):
+    def create_user(self, phone, password, schoolname, gender, name, paycode, avatar):
         cursor = self.db.cursor()
         # sql语句
         sql = """
@@ -115,10 +113,10 @@ class OpDB:
         userid = cursor.lastrowid
 
         sql = """
-                        INSERT INTO user_info2(userId, name) 
-                        VALUES (%s, %s)
+                        INSERT INTO user_info2(userId, name, avatar) 
+                        VALUES (%s, %s, %s)
                 """
-        cursor.execute(sql, (userid, name))
+        cursor.execute(sql, (userid, name, avatar))
 
         sql = """
                         INSERT INTO payment_info(userId, payCode) 
@@ -128,6 +126,7 @@ class OpDB:
         self.commit()
         cursor.close()
         self.close()
+        return userid
 
     def commit(self):
         self.db.commit()
@@ -144,7 +143,7 @@ class OpDB:
         cursor.execute(sql)
         self.commit()
 
-    # 修改昵称，个性签名
+    # 修改昵称，个性签名, 头像
     def change_info2(self, typename, value, userid):
         cursor = self.db.cursor()
         # sql语句
@@ -204,32 +203,29 @@ class OpDB:
     def get_loss(self, school):
         cursor = self.db.cursor()
         sql = "SELECT lossId,DATE_FORMAT(date,'%%Y-%%m-%%d %%H:%%I:%%s'),name,type,avatar from loss_info WHERE school " \
-              "= '%s' and state = 0" % school
+              "= '%s' and state = 0 order by date desc" % school
         cursor.execute(sql)
         data = cursor.fetchall()
         cursor.close()
         self.close()
-        # j = ()
-        # for i in data:
-        #     j = j + i
         return data
 
     # 根据学校名查询所有未出售的二手商品
     def get_commodity(self, school):
         cursor = self.db.cursor()
         sql = "SELECT commodityId, DATE_FORMAT(date,'%%Y-%%m-%%d %%H:%%I:%%s'), commodityName, type, avatar " \
-              "from commodity_info WHERE school = '%s' and state = 0" % school
+              "from commodity_info WHERE school = '%s' and state = 0 order by date desc" % school
         cursor.execute(sql)
         data = cursor.fetchall()
         cursor.close()
         self.close()
         return data
 
-    # 根据学校名查询所有未出售的二手商品
+    # 根据学校名查询所有未接取的代办
     def get_commission(self, school):
         cursor = self.db.cursor()
         sql = "SELECT commissionId,DATE_FORMAT(date,'%%Y-%%m-%%d %%H:%%I:%%s'),name,type,avatar from commission_info " \
-              "WHERE school = '%s' and state = 0" % school
+              "WHERE school = '%s' and state = 0 order by date desc" % school
         cursor.execute(sql)
         data = cursor.fetchall()
         cursor.close()
@@ -322,63 +318,81 @@ class OpDB:
         cursor = self.db.cursor()
         # sql语句
         sql = """
-                INSERT INTO shopping_info(userId, commodityId, address) 
-                VALUES (%s,%s,%s)
-        """
-        cursor.execute(sql, (userid, commodity, address))
-        orderid = cursor.lastrowid
-        sql = """
-                update commodity_info
-                set state = 1
-                where commodityId = %s
-                        """ % commodity
-        cursor.execute(sql)
-        sql = """
-                    select price,userId
-                    from commodity_info
+                            select state from commodity_info where commodityId = %s
+                      """
+        cursor.execute(sql, commodity)
+        state = cursor.fetchall()
+        state = state[0]
+        if state[0] == 0:
+            sql = """
+                    INSERT INTO shopping_info(userId, commodityId, address) 
+                    VALUES (%s,%s,%s)
+            """
+            cursor.execute(sql, (userid, commodity, address))
+            orderid = cursor.lastrowid
+            sql = """
+                    update commodity_info
+                    set state = 1
                     where commodityId = %s
-                """ % commodity
-        cursor.execute(sql)
-        data = cursor.fetchall()
-        data = data[0]
-        money = self.get_payment(userid)
-        if money < data[0]:
-            return False
+                            """ % commodity
+            cursor.execute(sql)
+            sql = """
+                        select price,userId
+                        from commodity_info
+                        where commodityId = %s
+                    """ % commodity
+            cursor.execute(sql)
+            data = cursor.fetchall()
+            data = data[0]
+            money = self.get_payment(userid)
+            if money < data[0]:
+                return 1
+            else:
+                self.create_trade("付款", userid, data[0], "二手" + str(orderid))
+                self.create_trade("充值", data[1], data[0], "二手" + str(orderid))
+                self.commit()
+                cursor.close()
+                self.close()
+                return 0
         else:
-            self.create_trade("付款", userid, data[0], "二手" + str(orderid))
-            self.create_trade("充值", data[1], data[0], "二手" + str(orderid))
-            self.commit()
-            cursor.close()
-            self.close()
-            return True
+            return 2
 
     # 根据用户id、代办id生成代办订单
     def create_daiban(self, userid, commissionid):
         cursor = self.db.cursor()
-        # sql语句
         sql = """
-                INSERT INTO daiban_info(userId, commissionId) 
-                VALUES (%s,%s)
-        """
-        cursor.execute(sql, (userid, commissionid))
-        sql = """
-                update commission_info
-                set state = 1
-                where commissionId = %s
-                        """ % commissionid
-        cursor.execute(sql)
-        self.commit()
-        cursor.close()
-        self.close()
+                    select state from commission_info where commissionId = %s
+              """
+        cursor.execute(sql, commissionid)
+        data = cursor.fetchall()
+        data = data[0]
+        if data[0] == 0:
+            sql = """
+                        INSERT INTO daiban_info(userId, commissionId) 
+                        VALUES (%s,%s)
+                 """
+            cursor.execute(sql, (userid, commissionid))
+            sql = """
+                        update commission_info
+                        set state = 1
+                        where commissionId = %s
+                                """ % commissionid
+            cursor.execute(sql)
+            self.commit()
+            cursor.close()
+            self.close()
+            return True
+        else:
+            return False
 
     # 新增失物/招领订单
     def create_lossinfo(self, userid, type_, name, address, detail, school, avatar):
         cursor = self.db.cursor()
-        # sql语句
+
         sql = """
-                INSERT INTO loss_info(userId, type, name, address, detail, school, avatar) 
-                VALUES (%s,%s,%s,%s,%s,%s,%s)
-        """
+                    INSERT INTO loss_info(userId, type, name, address, detail, school, avatar) 
+                    VALUES (%s,%s,%s,%s,%s,%s,%s)
+            """
         cursor.execute(sql, (userid, type_, name, address, detail, school, avatar))
         self.commit()
         cursor.close()
@@ -415,20 +429,17 @@ class OpDB:
     # 根据ID查询所有的失物招领订单
     def get_loss_order(self, userid):
         cursor = self.db.cursor()
-        sql = "SELECT lossId,DATE_FORMAT(date,'%%Y-%%m-%%d %%H:%%I:%%s'),name,type,state from loss_info WHERE " \
-              "userId = '%s' " % userid
+        sql = "SELECT lossId,DATE_FORMAT(date,'%%Y-%%m-%%d %%H:%%I:%%s'),name,type,state,avatar from loss_info WHERE " \
+              "userId = '%s' order by date desc" % userid
         cursor.execute(sql)
         data = cursor.fetchall()
-        # j = ()
-        # for i in data:
-        #     j = j + i
         return data
 
     # 根据用户id查询发布的商品
     def get_commodity_(self, userid):
         cursor = self.db.cursor()
-        sql = "SELECT commodityId,DATE_FORMAT(date,'%%Y-%%m-%%d %%H:%%I:%%s'),commodityName,type,state  from " \
-              "commodity_info WHERE userId = '%s' " % userid
+        sql = "SELECT commodityId,DATE_FORMAT(date,'%%Y-%%m-%%d %%H:%%I:%%s'),commodityName,type,state,avatar  from " \
+              "commodity_info WHERE userId = '%s' order by date desc" % userid
         cursor.execute(sql)
         data = cursor.fetchall()
         return data
@@ -436,8 +447,8 @@ class OpDB:
     # 根据用户id查询发布的代办
     def get_commission_(self, userid):
         cursor = self.db.cursor()
-        sql = "SELECT commissionId,DATE_FORMAT(date,'%%Y-%%m-%%d %%H:%%I:%%s'),name,type,state  from " \
-              "commission_info WHERE userId = '%s' " % userid
+        sql = "SELECT commissionId,DATE_FORMAT(date,'%%Y-%%m-%%d %%H:%%I:%%s'),name,type,state,avatar  from " \
+              "commission_info WHERE userId = '%s' order by date desc" % userid
         cursor.execute(sql)
         data = cursor.fetchall()
         return data
@@ -445,7 +456,7 @@ class OpDB:
     # 根据用户id查询发布二手订单
     def get_commodity_order(self, userid):
         cursor = self.db.cursor()
-        sql = "SELECT commodityId from commodity_info WHERE userId = '%s'" % userid
+        sql = "SELECT commodityId from commodity_info WHERE userId = '%s' order by date desc" % userid
         cursor.execute(sql)
         data = cursor.fetchall()
         j = ()
@@ -456,7 +467,7 @@ class OpDB:
             j = j + cursor.fetchall()
         k = ()
         for i in j:
-            sql = "SELECT commodityName,type from " \
+            sql = "SELECT commodityName,type,avatar from " \
                   "commodity_info WHERE commodityId = '%s'" % int(i[0])
             cursor.execute(sql)
             l = cursor.fetchall()
@@ -467,7 +478,7 @@ class OpDB:
     # 根据用户id查询发布代办订单
     def get_commission_order(self, userid):
         cursor = self.db.cursor()
-        sql = "SELECT commissionId from commission_info WHERE userId = '%s'" % userid
+        sql = "SELECT commissionId from commission_info WHERE userId = '%s' order by date desc" % userid
         cursor.execute(sql)
         data = cursor.fetchall()
         j = ()
@@ -479,7 +490,7 @@ class OpDB:
             j = j + cursor.fetchall()
         k = ()
         for i in j:
-            sql = "SELECT name,type from " \
+            sql = "SELECT name,type, avatar from " \
                   "commission_info WHERE commissionId = '%s'" % int(i[0])
             cursor.execute(sql)
             l = cursor.fetchall()
@@ -491,12 +502,12 @@ class OpDB:
     def get_commission_order1(self, userid):
         cursor = self.db.cursor()
         sql = "SELECT commissionId, orderId,DATE_FORMAT(date,'%%Y-%%m-%%d %%H:%%I:%%s'),state from daiban_info WHERE " \
-              "userId = '%s'" % userid
+              "userId = '%s'order by date desc" % userid
         cursor.execute(sql)
         data = cursor.fetchall()
         k = ()
         for i in data:
-            sql = "SELECT name,type from " \
+            sql = "SELECT name,type,avatar from " \
                   "commission_info WHERE commissionId = '%s'" % int(i[0])
             cursor.execute(sql)
             l = cursor.fetchall()
@@ -508,12 +519,12 @@ class OpDB:
     def get_commodity_order1(self, userid):
         cursor = self.db.cursor()
         sql = "SELECT commodityId, orderId,DATE_FORMAT(date,'%%Y-%%m-%%d %%H:%%I:%%s'),state from shopping_info WHERE " \
-              "userId = '%s'" % userid
+              "userId = '%s' order by date desc" % userid
         cursor.execute(sql)
         data = cursor.fetchall()
         k = ()
         for i in data:
-            sql = "SELECT commodityName,type from " \
+            sql = "SELECT commodityName,type,avatar from " \
                   "commodity_info WHERE commodityId = '%s'" % int(i[0])
             cursor.execute(sql)
             l = cursor.fetchall()
@@ -678,12 +689,12 @@ class OpDB:
     def commit_shoppingorder(self, orderid):
         cursor = self.db.cursor()
         datatime = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        # sql语句
+            # sql语句
         sql = """
-                update shopping_info
-                set state = '已完成' , time = %s
-                where orderId = %s
-        """
+                    update shopping_info
+                    set state = '已完成' , time = %s
+                    where orderId = %s
+            """
         cursor.execute(sql, (datatime, orderid))
         self.commit()
         cursor.close()
@@ -707,67 +718,59 @@ class OpDB:
     # 确认完成代办订单
     def commit_daibanorder(self, orderid):
         cursor = self.db.cursor()
-        try:
-            datatime = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            # sql语句
-            sql = """
+        datatime = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        sql = """
                     update daiban_info
                     set state = '已完成' , time = %s
                     where orderId = %s
             """
-            cursor.execute(sql, (datatime, orderid))
-            sql = """
+        cursor.execute(sql, (datatime, orderid))
+        sql = """
                         select commissionId,userId
                         from daiban_info
                         where orderId = %s
                 """ % orderid
-            cursor.execute(sql)
-            data1 = cursor.fetchall()
-            data1 = data1[0]
-            sql = """
-                                    select price,userId
-                                    from commission_info
-                                    where commissionId = %s
-                            """ % data1[0]
-            cursor.execute(sql)
-            data = cursor.fetchall()
-            data = data[0]
-            self.create_trade("充值", data1[1], data[0], "代办" + str(orderid))
-            self.create_trade("付款", 0, data[0], "代办" + str(orderid))
-            self.commit()
-        except Exception:
-            print("发生异常：", Exception)
-            self.rollback()
-            return False
-        finally:
-            cursor.close()
-            self.close()
-            return True
-
-    # 取消代办订单
-    def cancel_daibanorder(self, orderid):
-        cursor = self.db.cursor()
-        datatime = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        # sql语句
-        sql = """
-                update daiban_info
-                set state = '已取消' , time = %s
-                where orderId = %s
-        """
-        cursor.execute(sql, (datatime, orderid))
-        sql = """
-                    select commissionId
-                    from daiban_info
-                    where orderId = %s
-                                """ % orderid
         cursor.execute(sql)
         data1 = cursor.fetchall()
         data1 = data1[0]
         sql = """
-                    update commission_info
-                    set state = 0
-                    where commissionId = %s
-                """ % data1[0]
+                                    select price,userId
+                                    from commission_info
+                                    where commissionId = %s
+                            """ % data1[0]
+        cursor.execute(sql)
+        data = cursor.fetchall()
+        data = data[0]
+        self.create_trade("充值", data1[1], data[0], "代办" + str(orderid))
+        self.create_trade("付款", 0, data[0], "代办" + str(orderid))
+        self.commit()
+        cursor.close()
+        self.close()
+
+    # 取消代办订单
+    def cancel_daibanorder(self, orderid):
+
+        cursor = self.db.cursor()
+        datatime = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        sql = """
+                    update daiban_info
+                    set state = '已取消' , time = %s
+                    where orderId = %s
+            """
+        cursor.execute(sql, (datatime, orderid))
+        sql = """
+                        select commissionId
+                        from daiban_info
+                        where orderId = %s
+                                    """ % orderid
+        cursor.execute(sql)
+        data1 = cursor.fetchall()
+        data1 = data1[0]
+        sql = """
+                        update commission_info
+                        set state = 0
+                        where commissionId = %s
+                    """ % data1[0]
         cursor.execute(sql)
         self.commit()
         cursor.close()
@@ -777,32 +780,31 @@ class OpDB:
     def cancel_shoppingorder(self, orderid):
         cursor = self.db.cursor()
         datatime = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        # sql语句
         sql = """
-                update shopping_info
-                set state = '已取消' , time = %s
-                where orderId = %s
-        """
+                    update shopping_info
+                    set state = '已取消' , time = %s
+                    where orderId = %s
+            """
         cursor.execute(sql, (datatime, orderid))
         sql = """
-                select commodityId,userId
-                from shopping_info
-                where orderId = %s
-                        """ % orderid
+                    select commodityId,userId
+                    from shopping_info
+                    where orderId = %s
+                            """ % orderid
         cursor.execute(sql)
         data1 = cursor.fetchall()
         data1 = data1[0]
         sql = """
-                update commodity_info
-                set state = 0
-                where commodityId = %s
-        """ % data1[0]
+                    update commodity_info
+                    set state = 0
+                    where commodityId = %s
+            """ % data1[0]
         cursor.execute(sql)
         sql = """
-                    select price,userId
-                    from commodity_info
-                    where commodityId = %s
-                        """ % data1[0]
+                        select price,userId
+                        from commodity_info
+                        where commodityId = %s
+                            """ % data1[0]
         cursor.execute(sql)
         data = cursor.fetchall()
         data = data[0]
@@ -885,11 +887,58 @@ class OpDB:
     def get_trade(self, userid):
         cursor = self.db.cursor()
         sql = "SELECT type,tradeMoney, DATE_FORMAT(date,'%%Y-%%m-%%d %%H:%%I:%%s'), remarks from trade_info WHERE " \
-              "userId = '%s'" % userid
+              "userId = '%s' order by date desc" % userid
         cursor.execute(sql)
         data = cursor.fetchall()
         return data
 
+    # 查询聊天信息
+    def get_user(self, userid):
+        cursor = self.db.cursor()
+        sql = "SELECT userId,name, avatar from user_info2 WHERE userId = '%s'" % userid
+        cursor.execute(sql)
+        data = cursor.fetchall()
+        data = data[0]
+        cursor.close()
+        self.close()
+        return data
+
+    # 根据学校查询最新发布
+    def get_new_(self, name):
+        cursor = self.db.cursor()
+        sql = """SELECT commissionId,DATE_FORMAT(date,'%%Y-%%m-%%d %%H:%%I:%%s'),name,type,state,avatar,
+                userId,price,detail ,school
+                from commission_info
+                where  state = 0 AND school = '%s' 
+                order by date DESC""" % name
+        cursor.execute(sql)
+        data1 = cursor.fetchall()
+        data1 = data1[0]
+        print(data1)
+        sql = """SELECT commodityId,DATE_FORMAT(date,'%%Y-%%m-%%d %%H:%%I:%%s'),commodityName,type,state,avatar,
+                userId,price,detail ,school
+                from commodity_info
+                where  state = 0 AND school = '%s' 
+                order by date DESC""" % name
+        cursor.execute(sql)
+        data2 = cursor.fetchall()
+        data2 = data2[0]
+        print(data2)
+        sql = """SELECT lossId,DATE_FORMAT(date,'%%Y-%%m-%%d %%H:%%I:%%s'),name,type,state,avatar,
+                        userId,address,detail ,school
+                        from loss_info
+                        where  state = 0 AND school = '%s' 
+                        order by date DESC""" % name
+        cursor.execute(sql)
+        data3 = cursor.fetchall()
+        data3 = data3[0]
+        print(data3)
+        data = ()
+        data = data + (( data1 ),)+ ((data2),) + ((data3),)
+        cursor.close()
+        self.close()
+        print(data)
+        return data
 
 
 if __name__ == "__main__":
@@ -1031,5 +1080,6 @@ if __name__ == "__main__":
     # print(zz)
 
     Z = OpDB()
-    zz = Z.get_trade("10001020")
+    zz = Z.get_new_("中国矿业大学（北京）")
     print(zz)
+    print(zz[1])

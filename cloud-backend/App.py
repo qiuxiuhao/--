@@ -33,7 +33,7 @@ def login():  # 名字最好与访问路径同名
         data = z.get_userinfo(userid)
         l = database_operate.OpDB()
         data1 = l.get_payinfo(userid)
-        mydata = dict(zip(("id", "password", "phonenumber", "gender", "school", "name", "autograph"), data))
+        mydata = dict(zip(("id", "password", "phonenumber", "gender", "school", "name", "autograph", "avatar"), data))
         mydata1 = dict(zip(("payword", "no_secret"), data1))
 
     return {'contrast': contrast,
@@ -51,10 +51,14 @@ def userinfoset():
     gender = str(request.args.get('gender'))
     school = str(request.args.get('school'))
     pay_password = str(request.args.get('pay_password'))
+    avatar = str(request.args.get('avatar'))
     m = database_operate.OpDB()
-    m.create_user(phonenumber, password, school, gender, name, int(pay_password))
+    userid = m.create_user(phonenumber, password, school, gender, name, int(pay_password), avatar)
+    data = (userid, name, phonenumber, password, gender, school, pay_password, avatar)
+    print(data)
+    mydata = dict(zip(("id", "name", "phonenumber", "password", "gender", "school", "pay_password", "avatar"), data))
     return {
-        'f': 'true'
+        'userinfo': mydata
     }
 
 
@@ -142,7 +146,7 @@ def myorder():
     for i in data4:
         data1 = data1 + ((i),)
 
-    mydata = [dict(zip(("Id", "orderId", "date", "status", "name", "type")
+    mydata = [dict(zip(("Id", "orderId", "date", "status", "name", "type", "avatar")
                        , x)) for x in data1]
     # print(mydata)
     return mydata
@@ -162,7 +166,7 @@ def myrelease():
     for i in data3:
         data1 = data1 + ((i),)
 
-    mydata = [dict(zip(("good_id", "date", "name", "type", "status")
+    mydata = [dict(zip(("good_id", "date", "name", "type", "status", "avatar")
                        , x)) for x in data1]
     # print(mydata)
     return mydata
@@ -279,7 +283,7 @@ def commit_daibanorder():
     else:
         m.commit_shoppingorder(orderid)
     return {
-        'f': 'true'
+        'f': True
     }
 
 
@@ -294,8 +298,9 @@ def cancel_daibanorder():
     else:
         m.cancel_shoppingorder(orderid)
     return {
-        'f': 'true'
+        'f': True
     }
+
 
 # 确认完成失物招领
 @app.route('/commit_lossorder')  # 访问路径,需要与hbuilder对应页面的url的.com之后的一致
@@ -307,6 +312,7 @@ def commit_lossorder():
         'f': 'true'
     }
 
+
 # 确认取消失物招领
 @app.route('/delete_loss')  # 访问路径,需要与hbuilder对应页面的url的.com之后的一致
 def delete_loss():
@@ -314,8 +320,9 @@ def delete_loss():
     m = database_operate.OpDB()
     m.delete_loss(goodid)
     return {
-        'f': 'true'
+        'f': True
     }
+
 
 # 确认取消商品
 @app.route('/delete_commodity')  # 访问路径,需要与hbuilder对应页面的url的.com之后的一致
@@ -345,24 +352,44 @@ def get_trade():
     userid = str(request.args.get('id'))
     m = database_operate.OpDB()
     data = m.get_trade(userid)
-    mydata = dict(zip(("type", "tradeMoney", "date", "remarks")
+    mydata = [dict(zip(("type", "tradeMoney", "date", "remarks")
+                       , x)) for x in data]
+    return mydata
+
+
+# 根据id查找聊天信息
+@app.route('/get_user')  # 访问路径,需要与hbuilder对应页面的url的.com之后的一致
+def get_user():
+    userid = str(request.args.get('id'))
+    m = database_operate.OpDB()
+    data = m.get_user(userid)
+    mydata = dict(zip(("id", "name", "avatar")
                       , data))
     return mydata
 
 
-# # 查询对应失物招领id的订单信息（含评价信息)
-# @app.route('/get_lossorder')  # 访问路径,需要与hbuilder对应页面的url的.com之后的一致
-# def get_lossorder():
-#     oderid = str(request.args.get('id'))
-#     typename = str(request.args.get('type'))
-#     # print(oderid)
-#     m = database_operate.OpDB()
-#     data = m.get_lossorder(oderid)
-#     mydata = dict(zip(('lossId','userId', 'data', 'good_name', 'state', 'time', 'phone', 'name'), data))
-#     return {
-#         "order": mydata
-#     }
-
+# 返回最新发布
+@app.route('/get_new_')  # 访问路径,需要与hbuilder对应页面的url的.com之后的一致
+def get_new_():
+    name = str(request.args.get('school'))
+    print(name)
+    m = database_operate.OpDB()
+    data = m.get_new_(name)
+    print(data)
+    commission = dict(
+        zip(("commissionId", "date", "name", "type", "state", "avatar", "userId", "price", "detail", "school")
+            , data[0]))
+    commodity = dict(
+        zip(("ccommodityId", "date", "name", "type", "state", "avatar", "userId", "price", "detail", "school")
+            , data[1]))
+    loss = dict(
+        zip(("commissionId", "date", "name", "type", "state", "avatar", "userId", "address", "detail", "school")
+            , data[2]))
+    return {
+        "commission": commission,
+        "commodity": commodity,
+        "loss": loss
+    }
 
 
 # 发布评价
@@ -378,16 +405,6 @@ def create_comment():
     }
 
 
-# # 查询用户发布的二手订单
-# @app.route('/user_commodity')  # 访问路径,需要与hbuilder对应页面的url的.com之后的一致
-# def user_commodity():
-#     userid = str(request.args.get('id'))
-#     m = database_operate.OpDB()
-#     data = m.get_commodity_order(userid)
-#     mydata = dict(zip(("commissionId", "userId", "date", "name", "school", "price", "avatar", "detail", "state", "type")
-#                       , data))
-#     return mydata
-
 # 发布失物招领
 @app.route('/create_loss')  # 访问路径,需要与hbuilder对应页面的url的.com之后的一致
 def create_loss():
@@ -399,9 +416,9 @@ def create_loss():
     school = str(request.args.get('school'))
     avatar = str(request.args.get('avatar'))
     m = database_operate.OpDB()
-    m.create_lossinfo(userid, typename, name, address, detail, school, avatar)
+    n = m.create_lossinfo(userid, typename, name, address, detail, school, avatar)
     return {
-        'f': 'true'
+        'f': n
     }
 
 
@@ -450,6 +467,7 @@ def create_shopping():
     commodity = str(request.args.get('good_id'))
     m = database_operate.OpDB()
     n = m.create_shopping(userid, address, commodity)
+    print(n)
     return {
         'f': n
     }
@@ -462,9 +480,14 @@ def create_daiban():
     commission = str(request.args.get('good_id'))
     m = database_operate.OpDB()
     n = m.create_daiban(userid, commission)
-    return {
-        'f': n
-    }
+    if n:
+        return {
+            'f': True
+        }
+    else:
+        return {
+            'f': False
+        }
 
 
 # 修改用户信息
@@ -477,6 +500,7 @@ def submitinfo():
     school = str(request.args.get('school'))
     userid = str(request.args.get('id'))
     autograph = str(request.args.get('autograph'))
+    avatar = str(request.args.get('avatar'))
     m = database_operate.OpDB()
     # m.change_info1('password', password, userid)
     # m.change_info1('phone', phonenumber, userid)
@@ -484,6 +508,7 @@ def submitinfo():
     m.change_info1('gender', gender, userid)
     m.change_info2('name', name, userid)
     m.change_info2('autograph', autograph, userid)
+    m.change_info2('avatar', avatar, userid)
     return {
         'f': 'true'
     }
@@ -547,7 +572,7 @@ def captcha():
     m = code.code()
     cd = str({"code": m})
     number = str(request.args.get('phonenumber'))
-    # send.senMessage(number, cd)
+    send.senMessage(number, cd)
     print(m)
     return {'captcha': m}
 
@@ -573,7 +598,7 @@ def register():
 
     l = database_operate.OpDB()
     data1 = l.get_payinfo(userid)
-    mydata = dict(zip(("id", "password", "phonenumber", "gender", "school", "name", "autograph"), data))
+    mydata = dict(zip(("id", "password", "phonenumber", "gender", "school", "name", "autograph", "avatar"), data))
     mydata1 = dict(zip(("payword", "no_secret"), data1))
 
     return {
